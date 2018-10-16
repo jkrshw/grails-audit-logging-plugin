@@ -22,6 +22,8 @@ import grails.gorm.transactions.Rollback
 import grails.plugins.orm.auditable.AuditLogContext
 import grails.plugins.orm.auditable.AuditLoggingConfigUtils
 import grails.testing.mixin.integration.Integration
+
+import org.springframework.transaction.TransactionStatus
 import org.springframework.util.StringUtils
 import spock.lang.Shared
 import spock.lang.Specification
@@ -161,6 +163,26 @@ class AuditInsertSpec extends Specification {
         AuditTrail.withNewSession {
             def events = AuditTrail.findAllByClassName('test.Author')
             events.size() == 0
+        }
+    }
+
+    void "Test transaction roll back"() {
+        given: "an author"
+        def author = new Author(name: "Bob", age: 39, famous: true)
+
+        when: "the save is rolled back"
+        Author.withNewTransaction { TransactionStatus status ->
+            author.save(flush: true, failOnError: true)
+            status.setRollbackOnly()
+        }
+
+        then: "author is not saved"
+        Author.get(author.id) == null
+
+        and: "no audit is created"
+        AuditTrail.withNewSession {
+            def events = AuditTrail.findAllByClassName('test.Author')
+            assert events.empty
         }
     }
 
